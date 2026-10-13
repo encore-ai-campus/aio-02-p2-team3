@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+from tempfile import gettempdir
 from io import BytesIO
 import argparse
 import ipaddress
@@ -17,11 +18,19 @@ from flask import Flask, Request as FlaskRequest, Response, jsonify, request, se
 from waitress import serve
 from werkzeug.exceptions import HTTPException, NotFound, Unauthorized, ServiceUnavailable
 from werkzeug.middleware.proxy_fix import ProxyFix
-from resume_conversion import MAX_UPLOAD_BYTES, extract_resume
-from guest_analysis_service import create_guest_blueprint
-from guest_analysis_engine import engine_available
-from job_catalog_service import install_job_catalog
-from backend_location import resolve_backend_root
+
+if __package__:
+    from .resume_conversion import MAX_UPLOAD_BYTES, extract_resume
+    from .guest_analysis_service import create_guest_blueprint
+    from .guest_analysis_engine import engine_available
+    from .job_catalog_service import install_job_catalog
+    from .backend_location import resolve_backend_root
+else:
+    from resume_conversion import MAX_UPLOAD_BYTES, extract_resume
+    from guest_analysis_service import create_guest_blueprint
+    from guest_analysis_engine import engine_available
+    from job_catalog_service import install_job_catalog
+    from backend_location import resolve_backend_root
 
 ROOT = Path(__file__).resolve().parent
 
@@ -419,7 +428,7 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
-def create_app(backend_url=None, *, internal_backend=False):
+def create_app(backend_url=None, *, integrated=False, internal_backend=False):
     app = Flask(__name__, static_folder=None)
     app.request_class = InMemoryUploadRequest
     app.config.update(
@@ -431,21 +440,27 @@ def create_app(backend_url=None, *, internal_backend=False):
     if os.environ.get("CAREERLENS_TRUST_PROXY") == "1":
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=0, x_port=0, x_prefix=0)
     on_render = os.environ.get("RENDER") == "true"
+    on_vercel = os.environ.get("VERCEL") == "1"
     if internal_backend and origin:
         internal = urlsplit(origin)
         if internal.scheme != "http" or internal.hostname != "127.0.0.1":
             raise ValueError("The embedded backend must use the local IPv4 loopback origin.")
-    if on_render and origin and not internal_backend:
+    if (on_render or on_vercel) and origin and not internal_backend:
         backend = urlsplit(origin)
         try:
             loopback = ipaddress.ip_address(backend.hostname).is_loopback
         except ValueError:
             loopback = backend.hostname == "localhost"
         if backend.scheme != "https" or loopback:
-            raise ValueError("Render BACKEND_URL must be the deployed API's HTTPS origin, not localhost.")
+            raise ValueError("Hosted BACKEND_URL must be the deployed API's HTTPS origin, not localhost.")
     public_origins = [os.environ.get("FRONTEND_PUBLIC_ORIGIN", "")]
     if on_render:
         public_origins.append(os.environ.get("RENDER_EXTERNAL_URL", ""))
+    if on_vercel:
+        for variable in ("VERCEL_URL", "VERCEL_PROJECT_PRODUCTION_URL"):
+            host = os.environ.get(variable, "").strip()
+            if host:
+                public_origins.append("https://" + host)
     for public_origin in public_origins:
         if public_origin:
             app.config["TRUSTED_HOSTS"].append(urlsplit(validate_origin(public_origin)).hostname)
@@ -477,8 +492,9 @@ def create_app(backend_url=None, *, internal_backend=False):
 
     install_job_catalog(app, origin, opener, verify_guest_report_owner)
 
+    default_store = (Path(gettempdir()) / "careerlens-frontend" if on_vercel else ROOT / ".runtime") / "guest-reports.sqlite3"
     guest_api = create_guest_blueprint(
-        Path(os.environ.get("CAREERLENS_GUEST_STORE_PATH", str(ROOT / ".runtime" / "guest-reports.sqlite3"))),
+        Path(os.environ.get("CAREERLENS_GUEST_STORE_PATH", str(default_store))),
         fetch_job=guest_catalog_job,
         verify_user=verify_guest_report_owner,
         available=lambda: bool(origin) and os.environ.get("CAREERLENS_GUEST_ANALYSIS", "1") != "0" and engine_available(),
@@ -653,6 +669,9 @@ def create_app(backend_url=None, *, internal_backend=False):
 
     @app.route("/api/<path:name>", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
     def api(name):
+        if integrated:
+            # FastAPI has already handled its routes before this fallback.
+            return jsonify(public_api_error(404, request.path)), 404
         if not origin:
             return (
                 jsonify(

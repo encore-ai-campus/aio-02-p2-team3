@@ -1,12 +1,14 @@
 # CareerLens Frontend
 
-프론트 `185f9fc` (`v2026.10.13-0925`)의 화면·눈 모션·보고서·공고 조회·창별 이용 흐름을 전체 저장소의 최신 PostgreSQL·JWT 백엔드에 연결한 작업본입니다. HTML/CSS와 브라우저 ES module을 사용하며 화면 실행에 npm 빌드는 필요하지 않습니다.
+프론트 `185f9fc` (`v2026.10.13-0925`)의 화면·눈 모션·보고서·공고 조회·창별 이용 흐름을 전체 저장소 `8e5869c`의 PostgreSQL·JWT 백엔드 및 Render·Vercel 배포 지원에 연결한 `v2026.10.13-1005` 작업본입니다. HTML/CSS와 브라우저 ES module을 사용하며 화면 실행에 npm 빌드는 필요하지 않습니다.
 
 ## 실행
 
 기본 실행 방법은 [전체 저장소 README](../README.md)입니다. 루트에서 의존성을 설치하고 `uvicorn app.main:app` 하나를 실행하면 화면·API·평가 워커가 같은 주소에서 작동합니다. 별도 `CareerLens-backend` 폴더나 `start.bat`은 필요하지 않습니다.
 
 루트 `.env`에 현재 PostgreSQL·JWT·모델 설정을 둡니다. 프론트 전용 옵션과 배포 구조는 [통합 안내](../docs/frontend-integration.md)를 참고하세요. `frontend/.env.example`은 선택적으로 `server.py`를 따로 실행하는 개발용 설정 예시이며 통합 실행의 기본 설정 파일은 루트 `.env`입니다.
+
+기존 [Vercel 프론트 분리 배포](infra/deploy/vercel.md)도 지원합니다. Vercel에서는 `frontend`를 Root Directory로 지정하고 `BACKEND_URL`로 Render API에 연결합니다. 아래 비회원 실제 계산 설명은 분석 엔진과 설정을 함께 설치한 통합 실행 기준입니다. 프론트 전용 Vercel 배포에는 엔진이 포함되지 않습니다.
 
 ## 화면과 결과
 

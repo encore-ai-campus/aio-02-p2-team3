@@ -2,7 +2,7 @@
 
 ## 기준과 실행 구조
 
-2026-10-13 통합 작업은 `CareerLens-fullstack` 기준 `9ec80d9`에 `CareerLens-frontend`의 `185f9fc` (`v2026.10.13-0925`) 프론트 작업을 적용합니다. 최신 백엔드의 PostgreSQL·JWT·문서 파싱·UUID 및 날짜 직렬화 수정은 유지합니다. 이 문서는 준비된 소스의 실행 방법이며 운영 배포 완료 기록이 아닙니다.
+2026-10-13 통합 버전 `v2026.10.13-1005`는 `CareerLens-fullstack` 기준 `8e5869c`에 `CareerLens-frontend`의 `185f9fc` (`v2026.10.13-0925`) 프론트 작업을 적용합니다. 최신 백엔드의 PostgreSQL·JWT·문서 파싱·UUID 및 날짜 직렬화 수정과 Render·Vercel 배포 지원을 유지합니다. 이 문서는 준비된 소스의 실행 방법이며 운영 배포 완료 기록이 아닙니다.
 
 ```text
 브라우저 /                 → 프론트 화면·모션
@@ -50,9 +50,18 @@ $env:FRONTEND_PUBLIC_ORIGIN = "http://127.0.0.1:5400"
 
 임시 파일 시스템만 사용하는 Render 구성에서는 프론트 SQLite 결과가 재시작·재배포 때 유지된다고 보장할 수 없습니다. 이미 사용할 수 있는 영속 디스크가 있다면 `CAREERLENS_GUEST_STORE_PATH`를 그 디스크의 파일 경로로 지정합니다. 이 통합은 디스크를 신규 생성하거나 유료 리소스를 신청하지 않습니다. 여러 인스턴스가 각자 별도 SQLite를 사용하면 결과·쿠키 연결이 공유되지 않으므로 현재 저장소 구성을 확인한 후 운영 범위를 정해야 합니다.
 
-기존 팀 Blueprint는 `blueprints/team3.yaml`입니다. `aio2-team3`, `agentservice-team3`, `agent-db-team3` 이름과 기존 DB 연결·JWT 키를 유지합니다. 루트 `render.yaml`은 독립 환경용입니다. 두 구성의 `pip install -r requirements.txt` 및 `uvicorn app.main:app --host 0.0.0.0 --port $PORT`가 프론트까지 포함합니다. 별도 프론트 서비스나 별도 워커는 필요하지 않습니다.
+Render 통합 실행의 기존 팀 Blueprint는 `blueprints/team3.yaml`입니다. `aio2-team3`, `agentservice-team3`, `agent-db-team3` 이름과 기존 DB 연결·JWT 키를 유지합니다. 루트 `render.yaml`은 독립 환경용입니다. 두 구성의 `pip install -r requirements.txt` 및 `uvicorn app.main:app --host 0.0.0.0 --port $PORT`가 프론트까지 포함합니다. 이 구성에서는 별도 프론트 서비스나 별도 워커가 필요하지 않습니다.
 
 `frontend/render.yaml`의 이전 프론트 전용 배포 정의는 통합 실행에 사용하지 않습니다. 운영 서비스의 배포 완료와 비회원 가용성은 실제 적용 후 확인해야 합니다. 이번 로컬 작업으로 GitHub나 운영 서비스가 자동 변경되지는 않습니다.
+
+기존 Vercel 분리 배포는 `frontend` 폴더를 Root Directory로 사용합니다. 독립 진입점 `wsgi.py`의 WSGI `app`, 플랫폼 호스트 허용, 임시 저장 경로와 `frontend/vercel.json`을 사용하며 회원 요청은 `BACKEND_URL`의 Render HTTPS API로 전달합니다. `frontend/pyproject.toml`은 `wsgi:app`을 Vercel 진입점으로 지정합니다. Render 통합 import 중에 독립 앱이 먼저 만들어지지 않도록 진입점을 분리했습니다. 이 배포는 루트 백엔드 엔진을 포함하지 않아 비회원 실제 계산을 제공하지 않습니다. 기본 Vercel 임시 SQLite는 영속 결과 보관용이 아닙니다. 상세 설정은 [Vercel 배포 안내](../frontend/infra/deploy/vercel.md)를 참고하세요.
+
+| 확인 항목 | Render 통합 실행 | Vercel 프론트 + Render API |
+| --- | --- | --- |
+| 시작 진입점 | 루트 `app.main:app` | `frontend/wsgi.py`의 WSGI `app` |
+| API 연결 | 같은 서버의 기존 FastAPI | `BACKEND_URL`의 HTTPS API |
+| `/health` | DB 연결 확인 | 프론트 생존·API 주소 설정 여부 |
+| 비회원 실제 계산 | 엔진 의존성과 모델 설정이 있으면 가능 | 현재 프론트 전용 구성에는 엔진 없음 |
 
 ## 다른 PC에서 다를 때
 

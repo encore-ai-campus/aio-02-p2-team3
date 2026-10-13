@@ -2,7 +2,6 @@
 
 import os
 from pathlib import Path
-import sys
 
 from starlette.middleware.wsgi import WSGIMiddleware
 from starlette.responses import JSONResponse
@@ -73,18 +72,13 @@ class FrontendBoundary:
 
 
 def mount_frontend(application):
-    # The frontend also remains executable as `python frontend/server.py`, so
-    # its sibling support modules retain their standalone import names.
-    frontend_path = str(FRONTEND_ROOT)
-    if frontend_path not in sys.path:
-        sys.path.insert(0, frontend_path)
     from frontend.server import create_app, load_local_env
 
     load_local_env(FRONTEND_ROOT.parent / ".env")
     raw_port = os.environ.get("PORT", "8000")
     if not raw_port.isascii() or not raw_port.isdecimal() or not 1 <= int(raw_port) <= 65535:
         raise ValueError("PORT must be an integer between 1 and 65535")
-    frontend = create_app(f"http://127.0.0.1:{int(raw_port)}", internal_backend=True)
+    frontend = create_app(f"http://127.0.0.1:{int(raw_port)}", integrated=True, internal_backend=True)
     application.state.frontend = frontend
     application.mount("/", FrontendBoundary(frontend), name="frontend")
     return frontend

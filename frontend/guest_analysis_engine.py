@@ -19,7 +19,10 @@ from threading import RLock
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-from backend_location import resolve_backend_root
+if __package__:
+    from .backend_location import resolve_backend_root
+else:
+    from backend_location import resolve_backend_root
 
 
 _BACKEND_ROOT = resolve_backend_root(Path(__file__).resolve().parent)

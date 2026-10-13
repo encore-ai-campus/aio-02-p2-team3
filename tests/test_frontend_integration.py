@@ -133,6 +133,27 @@ def test_production_entrypoint_keeps_health_and_frontend(monkeypatch):
     assert client.get("/api/v1/auth/session").status_code == 404
 
 
+def test_integrated_startup_ignores_standalone_backend_url():
+    """Use a fresh process so import-time factory side effects cannot be cached."""
+    import os
+    from pathlib import Path
+    import subprocess
+    import sys
+
+    environment = {
+        **os.environ,
+        "RENDER": "true",
+        "BACKEND_URL": "http://127.0.0.1:5301",
+        "PORT": "8000",
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", "from app.main import app; assert app.state.frontend.test_client().get('/health').json['backend_configured'] is True"],
+        cwd=Path(__file__).resolve().parents[1], env=environment,
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 @pytest.mark.asyncio
 async def test_frontend_shutdown_runs_even_when_backend_cleanup_fails(monkeypatch):
     import asyncio
