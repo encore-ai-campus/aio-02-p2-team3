@@ -1,6 +1,7 @@
 """Initialize the Render schema on a new, empty PostgreSQL database only."""
 import asyncio
 from psycopg import AsyncConnection
+from psycopg.rows import dict_row
 from app.core.config import ROOT, settings
 from app.core.asyncio import run
 
@@ -12,7 +13,7 @@ async def main():
         raise RuntimeError('DATABASE_URL is required')
     schema = (ROOT / 'migrations/render/000_full_schema.sql').read_text(encoding='utf-8-sig')
     try:
-        async with await AsyncConnection.connect(dsn, connect_timeout=15) as conn:
+        async with await AsyncConnection.connect(dsn, connect_timeout=15, row_factory=dict_row) as conn:
             existing = await (await conn.execute(
                 "select exists (select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace "
                 "where n.nspname='public' and c.relkind in ('r','p','v','m','S')) as has_objects"
