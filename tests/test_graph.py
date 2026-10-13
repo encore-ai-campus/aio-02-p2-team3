@@ -30,7 +30,12 @@ async def test_graph_joins_all_domains_and_rechecks_only_affected():
     assert len(result['results']) == 12
     assert calls.count('B1') == 2
     assert all(calls.count(code) == 1 for code in result['results'] if code != 'B1')
-    assert result['scores']['overall_score'] == pytest.approx(80)
+    assert result['scores']['resume_completeness'] == pytest.approx(80)
+    for domain in ['job_fit', 'qualifications', 'practical_competitiveness']:
+        assert result['scores'][domain] == pytest.approx(100)
+    # Empty job requirements receive full credit; only A uses the fake LLM's 80.
+    expected = (.15 * 80 ** .5 + .85 * 10) ** 2
+    assert result['scores']['overall_score'] == pytest.approx(expected)
     assert llm.critics == 2
 
 
@@ -40,7 +45,7 @@ def test_fabricated_evidence_is_rejected():
 
 
 @pytest.mark.asyncio
-async def test_unresolved_critic_is_bounded_and_withholds_total():
+async def test_unresolved_critic_is_bounded_and_marks_actual_score_partial():
     class PersistentCritic(FakeLLM):
         async def parse(self, schema, instruction, payload):
             if schema is CriticReview:
@@ -50,5 +55,7 @@ async def test_unresolved_critic_is_bounded_and_withholds_total():
     async def trace(state,code,result): calls.append(code)
     result = await EvaluationEngine(PersistentCritic(),trace).build().ainvoke(initial())
     assert calls.count('B1') == 2
-    assert result['scores']['overall_score'] is None
+    assert all(calls.count(code) == 1 for code in result['results'] if code != 'B1')
+    assert result['rechecks'] == 1
+    assert result['scores']['overall_score'] == pytest.approx((.15 * 80 ** .5 + .85 * 10) ** 2)
     assert result['scores']['validation_status'] == 'partial'

@@ -1,17 +1,5 @@
-# Test/presentation deployment: frontend only. No backend, worker or database provisioning.
-services:
-  - type: web
-    name: careerlens-frontend-demo
-    runtime: python
-    plan: free
-    region: singapore
-    branch: sub-main/withandwithout
-    autoDeployTrigger: "off"
-    buildCommand: python -m pip install -r requirements.txt
-    startCommand: python server.py --host 0.0.0.0 --port $PORT
-    healthCheckPath: /health
-    envVars:
-      - key: BACKEND_URL
-        sync: false
-      - key: PYTHONUNBUFFERED
-        value: "1"
+# Historical standalone frontend location; not a deployable Blueprint.
+# Fullstack now serves frontend + API + worker with uvicorn app.main:app.
+# Use ../blueprints/team3.yaml for the existing team service, or ../render.yaml
+# for an independent environment. Do not create another frontend service.
+# See ../docs/frontend-integration.md for ports, settings, and guest-result storage.

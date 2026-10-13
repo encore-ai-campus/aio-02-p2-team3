@@ -1,5 +1,7 @@
 # CareerLens 백엔드와 Render 배포
 
+현재 `app.main:app`는 프론트 화면·회원 API·평가 워커를 함께 제공합니다. 통합 실행과 비회원 분석 설정은 [프론트 통합 안내](frontend-integration.md)를 우선합니다. 기존 DB에 프론트를 연결하기 위해 아래 새 DB 초기화 절차를 다시 실행하지 마세요.
+
 Python 3.13 (`.python-version`으로 고정). FastAPI 한 프로세스가 API와 Evaluation Worker를 함께 실행합니다. 데이터베이스는 Render PostgreSQL이며 비동기 psycopg 연결을 사용합니다.
 
 ## 로컬 실행
@@ -21,8 +23,12 @@ python -m venv .venv
 서버 실행:
 
 ```powershell
+$env:PORT = "5101"
+$env:FRONTEND_PUBLIC_ORIGIN = "http://127.0.0.1:5101"
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 5101 --loop app.core.asyncio:uvicorn_loop_factory
 ```
+
+프론트의 내부 API 연결에 사용하는 `PORT`와 Uvicorn `--port`는 같아야 합니다. 다른 포트를 쓰면 브라우저 주소와 두 설정을 함께 변경합니다.
 
 ## Render 배포
 

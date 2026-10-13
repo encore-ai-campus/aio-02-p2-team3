@@ -34,8 +34,11 @@ async def lifespan(app):
         except asyncio.CancelledError:
             pass
         finally:
-            await app.state.db.close()
-            await app.state.llm.close()
+            try:
+                await app.state.db.close()
+                await app.state.llm.close()
+            finally:
+                app.state.frontend.extensions['guest_analysis'].shutdown(wait=False)
 
 
 app = FastAPI(title='CareerLens Backend', version='0.1.0', lifespan=lifespan)
@@ -76,3 +79,10 @@ async def health(request: Request):
 async def healthz():
     # Render liveness checks should not turn a temporary database/LLM outage into a restart loop.
     return {'status': 'ok'}
+
+
+# Register last: existing backend API/authentication and health routes keep
+# their native handlers; frontend-owned APIs and pages use the same origin.
+from app.frontend import mount_frontend
+
+mount_frontend(app)

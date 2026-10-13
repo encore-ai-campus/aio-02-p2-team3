@@ -1,120 +1,63 @@
-# 채용공고 맞춤형 이력서 검증 에이전트 — Backend
+# CareerLens Fullstack
 
-이 폴더는 main 브랜치의 독립 백엔드 Git 저장소입니다.
-API, 업무 규칙, LangGraph 분석 엔진, 테스트 데이터, 설계 문서와 배포 설정을 이 저장소 안에서 관리합니다.
-FastAPI와 LangGraph 기반 매칭 평가 백엔드를 구현했습니다. 실행·API·채점 정책은 [백엔드 실행 안내](docs/backend-implementation.md)를 참고하세요.
+프론트 화면, FastAPI, 평가 워커를 한 저장소에서 실행합니다. 전체 저장소 기준 `9ec80d9`의 PostgreSQL·JWT 인증과 분석 엔진에 프론트 `185f9fc` (`v2026.10.13-0925`)의 화면·보고서·창별 이용 흐름을 연결했습니다. 아래 내용은 로컬 통합 작업본 기준이며 운영 배포 완료를 의미하지 않습니다.
 
-## 전체 구조
+## 로컬 실행
 
-```text
-.
-├── app/
-│   ├── application/          # 업무 흐름 조정·그래프 실행·외부 구현 조립
-│   ├── api/v1/routes/         # 버전별 HTTP 진입점
-│   ├── core/                 # 설정, 공통 예외, 보안, 로깅
-│   ├── modules/              # 기능별 업무 모델·서비스·저장소 인터페이스
-│   │   ├── auth/             # 인증, 사용자, 역할·접근 권한
-│   │   ├── resumes/
-│   │   │   ├── parsing/       # 구조화, 원문 위치, 재파싱
-│   │   │   └── normalization/ # 기술명 정규화, 기간·최근성 계산
-│   │   ├── job_postings/      # 공고·요건, 정규화·분류, 저장 공고
-│   │   ├── analysis/
-│   │   │   ├── matching/      # 요건과 근거 연결·판정
-│   │   │   ├── scoring/       # 점수·신뢰도 계산 확장 영역
-│   │   │   ├── validation/    # 스키마·출처·일관성·정책 검증
-│   │   │   └── reporting/     # 결과·근거·보완 질문 구성
-│   │   ├── preparation/       # 준비 작업, 가용 시간·일정 규칙
-│   │   └── admin/             # 운영·공고 관리 유스케이스
-│   ├── agent/                # 단일 LangGraph 에이전트
-│   │   ├── graphs/           # 분석·준비 일정 그래프, 조건 분기
-│   │   ├── nodes/            # 단계별 실행과 업무 로직 호출
-│   │   ├── tools/            # 허용 도구 등록·입출력 경계
-│   │   ├── prompts/          # 버전별 프롬프트
-│   │   └── state/            # 실행 상태, 재시도·수정 이력
-│   ├── retrieval/
-│   │   ├── indexing/         # 청크, 인덱스 구성
-│   │   ├── search/           # 키워드·벡터 검색, 질의 재구성
-│   │   └── reranking/        # 후보 근거 정렬
-│   ├── integrations/
-│   │   ├── llm/
-│   │   ├── embeddings/
-│   │   ├── document_parsers/ # PDF·DOCX 추출 라이브러리 어댑터
-│   │   ├── company_info/     # 선택적 OpenDART 등 기업 정보
-│   │   └── calendar/         # Mock 또는 추후 일정 제공자 연동
-│   └── infrastructure/
-│       ├── database/         # DB 연결·저장소·벡터 저장소 구현
-│       └── storage/          # 임시 파일·객체 저장소, 보존·삭제
-├── contracts/
-│   ├── openapi/              # 백엔드가 관리·공개하는 버전별 API 명세
-│   └── schemas/              # 요청·응답·교환 데이터 JSON Schema
-├── data/
-│   └── knowledge/
-│       ├── taxonomy/         # 기술·직무 분류체계
-│       └── policies/         # 판정·매칭 정책 자료
-├── tests/
-│   ├── unit/
-│   ├── integration/
-│   └── fixtures/             # 테스트 원문·응답·오류 사례
-│       ├── resumes/          # 테스트용 합성 이력서
-│       └── job_postings/     # 테스트용 가상 채용공고
-├── evaluations/
-│   ├── datasets/             # 사례 연결 예제·정답·fixture 참조
-│   └── metrics/              # 근거 정확도·판정 일관성 등
-├── workers/                  # 추후 비동기 작업 진입점
-├── migrations/               # 추후 DB 스키마 변경
-├── scripts/
-│   ├── export-api-contract.ps1 # 버전별 API 명세 릴리스 산출물
-│   └── validate-fixtures.ps1   # 사례 ID·입력·정답 파일 참조 검증
-├── docs/
-│   ├── architecture/         # 구조·그래프·책임 경계
-│   ├── api/                  # API 사용·버전 관리 안내
-│   ├── product/              # 백엔드 기능·업무 정책
-│   └── references/           # 기획·모델·아키텍처 참고자료
-├── infra/
-│   ├── docker/               # 백엔드·worker 컨테이너 설정
-│   └── deploy/               # API·DB·worker 배포 설정
-├── .gitignore
-└── README.md
+Python 3.13 (`.python-version`)과 설정된 PostgreSQL DB가 필요합니다. 저장소 루트에서 실행합니다.
+
+```powershell
+python -m venv .venv
+./.venv/Scripts/python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
 ```
 
-## 책임 경계
+이미 `.env`가 있다면 복사하지 않고 기존 설정을 보존합니다. 루트 `.env`에 `DATABASE_URL`, 32자 이상의 `JWT_SECRET_KEY`, `OPENAI_API_KEY`를 설정합니다. 새 DB 초기화와 기존 DB를 구분하는 기준은 [백엔드 실행 안내](docs/backend-implementation.md)를 참고하세요. 프론트 연결을 위해 기존 DB를 초기화할 필요는 없습니다.
 
-API 라우트와 worker는 application 유스케이스를 호출합니다. application은 모듈 서비스와 그래프 실행을 조합합니다.
-그래프 노드는 도메인 규칙·검색·어댑터를 조합하며 application을 참조하지 않습니다. modules의 규칙은 agent·application·외부 구현을 참조하지 않습니다.
-인증·CRUD·저장 업무는 일반 서비스에서 관리하고, LangGraph는 분석·검증·수정·일정 재계획을 담당합니다.
+```powershell
+$env:PORT = "5400"
+$env:FRONTEND_PUBLIC_ORIGIN = "http://127.0.0.1:5400"
+./.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 5400 --loop app.core.asyncio:uvicorn_loop_factory
+```
 
-모듈 내부의 `models.py`, `schemas.py`, `service.py`, `repository.py` 등은 구현에 필요한 만큼 추가합니다.
-저장소 인터페이스는 해당 모듈에, DB에 종속되는 구현은 `app/infrastructure/database`에 두는 방향입니다.
+브라우저에서 [http://127.0.0.1:5400](http://127.0.0.1:5400)을 엽니다. `PORT`와 Uvicorn `--port`를 같은 값으로 지정해야 프론트 내부 API 연결이 맞습니다. 루트 의존성 설치에 프론트 의존성도 포함되며 별도 npm 빌드는 필요하지 않습니다. 평가 워커는 FastAPI가 시작하므로 별도 워커를 실행하지 않습니다.
 
-`resumes/parsing`은 필드 구조화·근거 위치·재파싱을, `integrations/document_parsers`는 파일 형식별 텍스트 추출 연결을 담당합니다.
-`analysis/validation`은 결정적 검증 규칙을, `agent/nodes`는 검증 호출과 재실행 경로를 담당합니다.
-`analysis/scoring`은 12개 초기 채점 기준과 가중 기하평균을 구현합니다. 미확인 항목 및 미해결 검증 문제는 종합점수 보류로 표시합니다.
+## 분석과 인증
 
-## API 계약과 저장소 독립성
+- 회원 분석과 저장 보고서는 기존 PostgreSQL API·워커를 사용합니다. 인증은 현재 백엔드의 이메일·비밀번호와 JWT를 사용합니다.
+- 비회원 분석은 프론트 서버가 루트 `app/`의 실제 엔진으로 계산하고 비공개 임시 저장소에 결과를 보관합니다. 보고서 본문·점수는 로그인 또는 가입 후 인증을 확인하여 보여주며 재분석하지 않습니다.
+- 비회원 엔진을 사용할 수 없으면 연결 오류를 표시합니다. 저장소를 받는 것만으로 모델 키나 DB 설정이 복사되지는 않습니다.
+- 마이페이지 대시보드는 본인 평가 기록을 조회합니다. 이용 흐름은 같은 출처의 원래 작업 창과 관찰 창을 고정 연결합니다. 백엔드 관리 API의 관리자 권한은 유지합니다.
 
-백엔드 API 스키마를 원본으로 관리합니다. `scripts/export-api-contract.ps1`은 생성된 OpenAPI JSON을 버전·해시와 함께 `contracts/openapi/v<version>`에 내보내고 동일 버전 덮어쓰기를 막습니다.
-프론트엔드는 공개된 버전별 명세를 받아 자신의 API 클라이언트·타입을 관리합니다.
-실행·빌드·테스트에 다른 저장소의 로컬 폴더가 필요하지 않도록 구성합니다.
-의존성은 `requirements.txt`와 `requirements.lock.txt`, 환경변수는 루트 `.env`에서 관리합니다. CI와 배포 구성은 후속 작업입니다.
+## 배포와 확인
 
-## 테스트 데이터
+팀 배포는 [blueprints/team3.yaml](blueprints/team3.yaml), 독립 환경은 [render.yaml](render.yaml)을 사용합니다. 기존 `uvicorn app.main:app` 시작 명령이 화면과 API를 함께 제공합니다. 팀 서비스·프로젝트·DB 이름을 유지하며 별도 프론트 서비스를 만들 필요가 없습니다. `frontend/render.yaml`은 이전 독립 프론트 구성의 안내 파일입니다.
 
-테스트용 이력서는 `tests/fixtures/resumes`, 테스트용 채용공고는 `tests/fixtures/job_postings`에 둡니다.
-파싱·요건 추출·매칭 통합 테스트와 에이전트 평가가 같은 원문을 재사용할 수 있도록 입력 데이터를 한곳에서 관리합니다.
-`evaluations/datasets`에는 평가 사례·정답과 fixture 참조를 두고 원문을 중복 저장하지 않습니다.
-외부 도구 응답과 오류 사례도 필요할 때 `tests/fixtures` 아래에 구분해 추가합니다.
+`/healthz`는 프로세스 생존, `/health`는 DB 연결, `/api/v1/local-guest/capabilities`는 비회원 엔진의 의존성·설정 가용성을 확인합니다. 가용성 응답은 실제 모델 요청이나 분석 성공을 보증하지 않습니다.
 
-이력서·공고 폴더에는 아직 샘플 파일이 없습니다. `evaluations/datasets/cases.example.json`은 비어 있는 사례 연결 형식이고, `scripts/validate-fixtures.ps1`은 사례 ID·안전한 파일 참조·정답 JSON을 검증합니다.
-버전 관리할 이력서는 합성·비식별 자료를 사용합니다. 실제 업로드와 개인 자료는 `data/uploads`, `data/private`, `.runtime` 등의 Git 제외 위치에서 관리합니다.
-기술 분류·판정 정책처럼 서비스가 참조하는 지식 자료는 `data/knowledge`에 둡니다.
+비회원 결과의 기본 저장 위치는 `frontend/.runtime/guest-reports.sqlite3`입니다. 임시 파일 시스템의 배포에서는 재시작·재배포로 결과가 사라질 수 있습니다. 기존 영속 디스크를 사용할 때 `CAREERLENS_GUEST_STORE_PATH`를 그 디스크의 파일 경로로 지정합니다. 회원 API가 저장한 PostgreSQL 보고서와는 별도 저장소입니다.
 
-Python/FastAPI/Pydantic, PostgreSQL/pgvector, OpenAI GPT-6 Luna, LangGraph 및 DB 큐 기반 Evaluation Worker를 사용합니다. Worker는 FastAPI lifespan에서 함께 실행됩니다. Render 배포는 [백엔드 실행 안내](docs/backend-implementation.md)를 참고합니다.
-상세 흐름도 대응은 [구조 설계 문서](docs/architecture/folder-structure.md), fixture 사용 기준은 [테스트 데이터 안내](tests/fixtures/README.md)를 참고합니다.
+연결 구조, 환경변수, 다른 PC에서의 점검 순서는 [프론트 통합 안내](docs/frontend-integration.md), 화면 동작은 [프론트 README](frontend/README.md)를 참고하세요.
 
-## 개발 시작 기준
+## 코드 위치와 검증
 
-먼저 이력서 입력·확인·승인, 공고 선택, 분석 실행, 근거 확인 흐름을 구현합니다.
-현재 구현은 Markdown 업로드, 인증, 공고 선택, Yahoo Finance 기업 맥락, 4개 영역 매칭 평가, worker, 진행률, 종합점수 및 Markdown 보고서입니다. 관리자·준비 일정·외부 일정은 확장 예약 영역입니다.
-의존 방향과 초기/확장 범위는 [의존 규칙](docs/architecture/dependencies.md), 명세 내보내기는 [API 계약 절차](docs/api/contract-workflow.md)에 정의되어 있습니다.
-업무 API와 개발용 OpenAPI 계약을 구현했습니다. 원격 저장소·태그·릴리스는 아직 없습니다.
+| 위치 | 역할 |
+| --- | --- |
+| `frontend/` | 화면·모션·API 어댑터·비회원 분석과 결과 연결 |
+| `app/frontend.py` | 같은 프로세스에 프론트 연결·API 경계 |
+| `app/api/`, `app/application/` | 회원 API·업무 흐름 |
+| `app/agent/`, `app/modules/` | 분석 그래프·채점·보고서 |
+| `app/infrastructure/database/` | PostgreSQL 연결 |
+| `workers/` | FastAPI가 실행하는 평가 워커 |
+
+```powershell
+./.venv/Scripts/python.exe -m pytest -q
+npm ci --prefix frontend/tools/matching-eye --ignore-scripts
+Push-Location frontend
+../.venv/Scripts/python.exe -m pytest -q tests
+node --test tests/unit/*.test.mjs
+Pop-Location
+```
+
+`npm ci`는 JavaScript 테스트에 필요한 Three.js 의존성을 설치합니다. 서비스 실행에는 npm 설치가 필요하지 않습니다. 합성 응답 기반 테스트와 실제 모델·DB 분석은 구분합니다. 이 실행 안내는 원격 DB 초기화, 실제 유료 분석, GitHub 게시 또는 운영 배포를 자동 수행하지 않습니다.
 
