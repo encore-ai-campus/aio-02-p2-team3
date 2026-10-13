@@ -1,6 +1,6 @@
 # CareerLens Frontend
 
-프론트 `185f9fc` (`v2026.10.13-0925`)의 화면·눈 모션·보고서·공고 조회·창별 이용 흐름을 전체 저장소 `8e5869c`의 PostgreSQL·JWT 백엔드 및 Render·Vercel 배포 지원에 연결한 `v2026.10.13-1005` 작업본입니다. HTML/CSS와 브라우저 ES module을 사용하며 화면 실행에 npm 빌드는 필요하지 않습니다.
+최신 `main`의 `fbc2450`에 기존 화면·모션·보고서·창별 이용 흐름과 실행 보고서 조회·공고 캐시 개선을 통합한 Render 배포 작업본입니다. HTML/CSS와 브라우저 ES module을 사용하며 화면 실행에 npm 빌드는 필요하지 않습니다.
 
 ## 실행
 
@@ -8,7 +8,7 @@
 
 루트 `.env`에 현재 PostgreSQL·JWT·모델 설정을 둡니다. 프론트 전용 옵션과 배포 구조는 [통합 안내](../docs/frontend-integration.md)를 참고하세요. `frontend/.env.example`은 선택적으로 `server.py`를 따로 실행하는 개발용 설정 예시이며 통합 실행의 기본 설정 파일은 루트 `.env`입니다.
 
-기존 [Vercel 프론트 분리 배포](infra/deploy/vercel.md)도 지원합니다. Vercel에서는 `frontend`를 Root Directory로 지정하고 `BACKEND_URL`로 Render API에 연결합니다. 아래 비회원 실제 계산 설명은 분석 엔진과 설정을 함께 설치한 통합 실행 기준입니다. 프론트 전용 Vercel 배포에는 엔진이 포함되지 않습니다.
+현재 배포 대상은 기존 Render 서비스입니다. [Render 안내](infra/deploy/render.md)의 통합 실행을 사용합니다.
 
 ## 화면과 결과
 
@@ -20,7 +20,9 @@
 
 ## 마이페이지와 관찰 창
 
-대시보드는 로그인한 계정의 평가 기록을 보여줍니다. `/api/v1/local-data/member-performance`를 통해 기존 회원 평가 API를 조회합니다. 백엔드의 `/api/v1/admin/evaluation-performance`는 기존 관리자 권한을 유지합니다.
+대시보드는 `/api/v1/member/evaluation-performance`로 로그인한 계정의 평가 기록을 보여줍니다. 구형 백엔드를 사용하는 독립 프론트에서는 같은 경로를 기존 회원 평가 API로 중계합니다. 백엔드의 관리자 권한은 유지합니다.
+
+대시보드의 **보고서 목록 불러오기**에서 서버의 `data/private/evaluation_execution_reports`에 저장된 본인 실행 Markdown을 각각 열 수 있습니다. `CAREERLENS_EXECUTION_REPORTS_DIR`로 읽을 경로를 지정할 수 있습니다. 소유권 검증 후 파일을 읽으며 원본은 변경하지 않습니다. 사용자 PC의 파일은 Git이나 Render로 자동 업로드되지 않습니다.
 
 이용 흐름은 작업 창 A와 관찰 창 A, B와 B를 고정 연결합니다. 다른 창으로 자동 전환하거나 전체 사용자를 수집하지 않습니다. 같은 출처에서 동작하며 비회원의 대시보드·관찰 화면 직접 접근은 인증 안내로 전환합니다. 입력 원문·보고서 본문·토큰을 관찰 이벤트에 담지 않습니다. 자세한 UI 동작은 [이용 흐름 설계](docs/product/activity-flow.md)를 참고하세요.
 

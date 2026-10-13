@@ -2,13 +2,14 @@
 
 ## 기준과 실행 구조
 
-2026-10-13 통합 버전 `v2026.10.13-1005`는 `CareerLens-fullstack` 기준 `8e5869c`에 `CareerLens-frontend`의 `185f9fc` (`v2026.10.13-0925`) 프론트 작업을 적용합니다. 최신 백엔드의 PostgreSQL·JWT·문서 파싱·UUID 및 날짜 직렬화 수정과 Render·Vercel 배포 지원을 유지합니다. 이 문서는 준비된 소스의 실행 방법이며 운영 배포 완료 기록이 아닙니다.
+현재 통합 작업본은 `CareerLens-fullstack`의 `main` 커밋 `fbc2450`을 기준으로 기존 프론트 통합 작업과 회원 대시보드 API를 연결합니다. PostgreSQL·JWT·문서 파싱·UUID 및 날짜 직렬화 수정을 유지하며 대시보드에 계정 소유 실행 보고서 파일 조회를 추가합니다. 실행 구성은 화면·API·워커가 같은 Render 서비스에 있는 통합 방식입니다. 이 문서는 준비된 소스의 실행 방법이며 운영 배포 완료 기록이 아닙니다.
 
 ```text
 브라우저 /                 → 프론트 화면·모션
 브라우저 /api/v1/...       → 기존 FastAPI 회원 API
   /local-guest/...         → 프론트 비회원 계산·인증 후 결과 연결
-  /local-data/...          → 문서 변환·공고 자료·본인 평가 대시보드
+  /member/...              → 현재 계정의 평가 대시보드 API
+  /local-data/...          → 문서 변환·공고 자료·호환 대시보드·실행 보고서 파일
 FastAPI lifespan          → PostgreSQL 연결·회원 평가 워커
 비회원 엔진               → 루트 app/ 파서·그래프·채점·보고서
 ```
@@ -29,6 +30,8 @@ FastAPI lifespan          → PostgreSQL 연결·회원 평가 워커
 | `FRONTEND_PUBLIC_ORIGIN` | 브라우저 주소, 사용자 지정 HTTPS 도메인도 여기 지정 |
 | `CAREERLENS_GUEST_ANALYSIS` | `1` 기본, `0`이면 새 비회원 계산 중지 |
 | `CAREERLENS_GUEST_STORE_PATH` | 선택 사항, 비회원 결과 SQLite 파일의 서버 경로 |
+| `EVALUATION_EXECUTION_REPORT_DIR` | 백엔드가 실행 보고서 Markdown을 쓰는 서버 폴더 |
+| `CAREERLENS_EXECUTION_REPORTS_DIR` | 프론트가 실행 보고서 Markdown을 읽는 서버 폴더, 위 경로와 일치 |
 
 현재 계정·DB 연결에 Supabase URL·키를 넣지 않습니다. 이전 Supabase 계정·저장 자료가 현재 PostgreSQL로 자동 이전되지는 않습니다. 통합 실행은 내부 주소를 사용하므로 `BACKEND_URL`을 설정할 필요가 없습니다. `frontend/.env`와 `FRONTEND_PORT`는 독립 프론트 실행에만 해당합니다.
 
@@ -54,14 +57,30 @@ Render 통합 실행의 기존 팀 Blueprint는 `blueprints/team3.yaml`입니다
 
 `frontend/render.yaml`의 이전 프론트 전용 배포 정의는 통합 실행에 사용하지 않습니다. 운영 서비스의 배포 완료와 비회원 가용성은 실제 적용 후 확인해야 합니다. 이번 로컬 작업으로 GitHub나 운영 서비스가 자동 변경되지는 않습니다.
 
-기존 Vercel 분리 배포는 `frontend` 폴더를 Root Directory로 사용합니다. 독립 진입점 `wsgi.py`의 WSGI `app`, 플랫폼 호스트 허용, 임시 저장 경로와 `frontend/vercel.json`을 사용하며 회원 요청은 `BACKEND_URL`의 Render HTTPS API로 전달합니다. `frontend/pyproject.toml`은 `wsgi:app`을 Vercel 진입점으로 지정합니다. Render 통합 import 중에 독립 앱이 먼저 만들어지지 않도록 진입점을 분리했습니다. 이 배포는 루트 백엔드 엔진을 포함하지 않아 비회원 실제 계산을 제공하지 않습니다. 기본 Vercel 임시 SQLite는 영속 결과 보관용이 아닙니다. 상세 설정은 [Vercel 배포 안내](../frontend/infra/deploy/vercel.md)를 참고하세요.
+## 실행 보고서 파일 연결
 
-| 확인 항목 | Render 통합 실행 | Vercel 프론트 + Render API |
-| --- | --- | --- |
-| 시작 진입점 | 루트 `app.main:app` | `frontend/wsgi.py`의 WSGI `app` |
-| API 연결 | 같은 서버의 기존 FastAPI | `BACKEND_URL`의 HTTPS API |
-| `/health` | DB 연결 확인 | 프론트 생존·API 주소 설정 여부 |
-| 비회원 실제 계산 | 엔진 의존성과 모델 설정이 있으면 가능 | 현재 프론트 전용 구성에는 엔진 없음 |
+대시보드에서 실제 평가가 만든 실행 기록 Markdown을 목록으로 조회하고 선택해 읽습니다. 기본 읽기 경로는 전체 저장소의 `data/private/evaluation_execution_reports`입니다. 이전 분리 저장소의 로컬 프론트에서는 형제 `CareerLens-backend/data/private/evaluation_execution_reports`를 사용합니다. 다른 폴더를 지정할 때 `CAREERLENS_EXECUTION_REPORTS_DIR`를 사용하며 요청 URL이나 브라우저에서 임의 파일 경로를 받지 않습니다.
+
+목록 API는 `GET /api/v1/local-data/execution-reports?limit=100&offset=0`, 상세 API는 `GET /api/v1/local-data/execution-reports/{run_id}`입니다. 서버가 현재 계정을 검증하고 본인 `/evaluations` 목록에 있는 UUID 파일만 연결합니다. 상세 조회는 `/evaluations/{run_id}` 소유권을 다시 확인합니다. 파일의 평가 UUID와 선택 ID가 일치해야 하며 파일에 소유자 ID가 있으면 현재 계정과 비교합니다. 목록 페이지의 `has_more`와 `next_offset`으로 다음 평가 기록을 확인합니다.
+
+파일은 읽기 전용입니다. 경로 탈출·심볼릭 링크·디렉터리 연결·하드 링크를 차단하고 읽기 크기를 제한합니다. 표시 내용에서 계정 식별자·키·토큰 등 인증정보를 가리며 응답을 캐시에 저장하지 않습니다. 사용자의 모델 응답과 근거 인용은 본인 보고서 열람 범위에서만 표시합니다.
+
+Render 단일 서비스에서는 파일을 만드는 백엔드와 읽는 프론트가 같은 폴더를 사용해야 합니다. 기본 경로를 사용한다면 추가 경로 설정이 필요하지 않습니다. 이미 구성된 영속 디스크를 사용하는 경우 두 환경변수에 그 디스크의 같은 폴더를 지정합니다. 아래 경로는 예시이며 실제 존재하는 서버 경로로 바꿉니다.
+
+```dotenv
+EVALUATION_EXECUTION_REPORT_DIR=/existing-private-disk/evaluation_execution_reports
+CAREERLENS_EXECUTION_REPORTS_DIR=/existing-private-disk/evaluation_execution_reports
+```
+
+개인 PC에 있는 Markdown은 Git이나 배포 서버로 자동 복사되지 않습니다. 임시 파일 시스템에만 둔 보고서는 재배포 후 사라질 수 있으며 폴더가 비어 있으면 파일 목록도 비어 있습니다. 새 경로 설정은 이미 생성된 파일을 옮기지 않으며 이전 파일의 이동이나 운영 리소스 생성도 자동 수행하지 않습니다.
+
+| 보고서 종류 | 저장 위치·조회 기준 |
+| --- | --- |
+| 회원 평가 결과 | PostgreSQL, 기존 회원 결과·보고서 API |
+| 비회원 계산 후 계정에 연결한 결과 | 프론트 SQLite, `CAREERLENS_GUEST_STORE_PATH` |
+| 단계·LLM 실행 기록 Markdown | 위 실행 보고서 폴더, 현재 계정의 평가 소유권 |
+
+실행 기록 파일이 없다는 이유로 회원 결과를 삭제하거나 새 유료 분석을 시작하지 않습니다. 파일 형식 검증과 실제 계정 API 연동 검증은 별도로 확인합니다.
 
 ## 다른 PC에서 다를 때
 
@@ -73,4 +92,4 @@ Render 통합 실행의 기존 팀 Blueprint는 `blueprints/team3.yaml`입니다
 
 `/healthz`는 생존, `/health`는 DB 상태를 확인합니다. 비회원 계산 가능 여부와 보고서 열람 권한은 다릅니다. 현재 흐름은 로그인 전 계산, 로그인·가입 후 본문 표시입니다. 회원 보고서 API가 인증 없이 401을 반환하는 것은 의도된 동작입니다.
 
-마이페이지 대시보드는 프론트의 `/api/v1/local-data/member-performance`로 본인 평가만 조회합니다. 기존 백엔드 관리자 API의 403을 없애거나 일반 회원에게 관리자 권한을 부여하지 않습니다.
+현재 백엔드는 `/api/v1/member/evaluation-performance`로 본인 평가를 조회합니다. 프론트의 `/api/v1/local-data/member-performance` 호환 경로도 같은 계정 범위를 지킵니다. 기존 백엔드 관리자 API의 403을 없애거나 일반 회원에게 관리자 권한을 부여하지 않습니다. 실행 보고서가 보이지 않으면 로그인 계정·백엔드 연결 대상·파일 존재 여부와 읽기/쓰기 경로 일치를 각각 확인합니다.

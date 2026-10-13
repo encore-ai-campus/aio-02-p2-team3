@@ -25,12 +25,14 @@ if __package__:
     from .guest_analysis_engine import engine_available
     from .job_catalog_service import install_job_catalog
     from .backend_location import resolve_backend_root
+    from .execution_report_service import install_execution_reports
 else:
     from resume_conversion import MAX_UPLOAD_BYTES, extract_resume
     from guest_analysis_service import create_guest_blueprint
     from guest_analysis_engine import engine_available
     from job_catalog_service import install_job_catalog
     from backend_location import resolve_backend_root
+    from execution_report_service import install_execution_reports
 
 ROOT = Path(__file__).resolve().parent
 
@@ -502,10 +504,11 @@ def create_app(backend_url=None, *, integrated=False, internal_backend=False):
     app.register_blueprint(guest_api)
     app.extensions["guest_analysis"] = guest_api.guest_service
 
-    def member_dashboard_json(path):
+    def member_dashboard_json(path, authorization=None):
         # Existing ownership-checked backend routes verify the bearer token.
         # Never impersonate an administrator or query the database directly.
-        authorization = request.headers.get("Authorization", "")
+        if authorization is None:
+            authorization = request.headers.get("Authorization", "")
         if not authorization.startswith("Bearer ") or not authorization[7:].strip():
             raise Unauthorized()
         if not origin:
@@ -523,6 +526,12 @@ def create_app(backend_url=None, *, integrated=False, internal_backend=False):
             abort(status)
         except (URLError, TimeoutError, OSError, ValueError, TypeError):
             raise ServiceUnavailable() from None
+
+    execution_directory = Path(os.environ.get(
+        "CAREERLENS_EXECUTION_REPORTS_DIR",
+        str(resolve_backend_root(ROOT) / "data" / "private" / "evaluation_execution_reports"),
+    )).expanduser()
+    install_execution_reports(app, execution_directory, verify_guest_report_owner, member_dashboard_json)
 
     def dashboard_run(row):
         if not isinstance(row, dict):
@@ -547,6 +556,7 @@ def create_app(backend_url=None, *, integrated=False, internal_backend=False):
 
     @app.get("/api/v1/local-data/member-performance")
     @app.get("/api/v1/admin/evaluation-performance")
+    @app.get("/api/v1/member/evaluation-performance")
     def member_dashboard():
         try:
             days = int(request.args.get("days", "30"))
@@ -575,6 +585,7 @@ def create_app(backend_url=None, *, integrated=False, internal_backend=False):
 
     @app.get("/api/v1/local-data/member-performance/<uuid:run_id>")
     @app.get("/api/v1/admin/evaluation-performance/<uuid:run_id>")
+    @app.get("/api/v1/member/evaluation-performance/<uuid:run_id>")
     def member_dashboard_detail(run_id):
         run = dashboard_run(member_dashboard_json(f"evaluations/{run_id}"))
         if run["id"] != str(run_id):

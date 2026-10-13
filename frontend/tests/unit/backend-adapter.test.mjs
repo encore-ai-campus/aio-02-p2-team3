@@ -2292,6 +2292,45 @@ test('callback validates only its profile without probing dashboard access', asy
   assert.deepEqual(calls, ['/me']);
 });
 
+for (const path of [
+  '/member/evaluation-performance?days=7&run_limit=100',
+  '/member/evaluation-performance/12345678-1234-5678-1234-123456789abc',
+  '/local-data/execution-reports?limit=20&offset=40',
+  '/local-data/execution-reports/12345678-1234-5678-1234-123456789abc',
+]) {
+  test(`${path} preserves authenticated GET parameters and response`, async () => {
+    const response = { summary: {}, reports: [], run: { id: 'synthetic' } };
+    const controller = new AbortController();
+    await assert.rejects(
+      backendApi(path, { signal: controller.signal }, async () => assert.fail('Login required'), ApiError),
+      (failure) => failure.status === 401 && failure.code === 'login_required',
+    );
+    sessionStorage.setItem('careerlens.backend.access-token', 'fixture-token');
+    assert.equal(await backendApi(path, { signal: controller.signal }, async (requested, options) => {
+      assert.equal(requested, path);
+      assert.deepEqual(options, { signal: controller.signal });
+      return response;
+    }, ApiError), response);
+  });
+}
+
+test('read-only report pass-through does not allow mutations, non-UUID details or unrelated local routes', async () => {
+  sessionStorage.setItem('careerlens.backend.access-token', 'fixture-token');
+  for (const [path, method] of [
+    ['/local-data/execution-reports', 'POST'],
+    ['/member/evaluation-performance', 'DELETE'],
+    ['/local-data/execution-reports/not-a-uuid', 'GET'],
+    ['/member/evaluation-performance/------------------------------------', 'GET'],
+    ['/local-data/execution-reports/12345678-1234-5678-1234-123456789abc/private', 'GET'],
+    ['/local-data/private', 'GET'],
+  ]) {
+    await assert.rejects(
+      backendApi(path, { method }, async () => assert.fail('Unlisted route must not call API'), ApiError),
+      (failure) => failure.status === 501,
+    );
+  }
+});
+
 for (const mode of ['anonymous', 'member', 'demo']) {
   test(`dashboard requires a real member session without an administrator check in ${mode} mode`, async () => {
     if (mode === 'member')

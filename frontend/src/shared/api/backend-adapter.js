@@ -1577,7 +1577,11 @@ export async function backendApi(path, options, request, ApiError) {
     request = ownerBoundRequest(request).request;
   if (/^\/flow(?:\/|$)/.test(cleanPath))
     return request(path, { method, body, signal, keepalive: options.keepalive });
-  if (/^\/admin\/evaluation-performance(?:\/[0-9a-f-]{36})?$/i.test(cleanPath) && method === 'GET') {
+  if (/^\/(?:admin|member)\/evaluation-performance(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$/i.test(cleanPath) && method === 'GET') {
+    requireReportSession(ApiError);
+    return request(path, { signal });
+  }
+  if (/^\/local-data\/execution-reports(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$/i.test(cleanPath) && method === 'GET') {
     requireReportSession(ApiError);
     return request(path, { signal });
   }

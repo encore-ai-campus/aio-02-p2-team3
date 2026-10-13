@@ -17,4 +17,6 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
 비회원 계산·계정 연결 결과는 기본 `frontend/.runtime/guest-reports.sqlite3`에 보관합니다. 임시 파일 시스템에서는 재배포 후 보존을 보장할 수 없으며 이미 구성된 영속 저장소가 있다면 `CAREERLENS_GUEST_STORE_PATH`를 사용합니다. 회원 API의 PostgreSQL 보고서와 이 저장소를 구분합니다.
 
-상세 연결 구조는 [프론트 통합 안내](../../../docs/frontend-integration.md), 기존 Vercel 프론트 분리 배포는 [Vercel 안내](vercel.md)를 참고하세요. 소스 준비와 운영 배포 완료는 별도로 확인합니다.
+실행 보고서 Markdown의 쓰기 경로 `EVALUATION_EXECUTION_REPORT_DIR`와 읽기 경로 `CAREERLENS_EXECUTION_REPORTS_DIR`는 같은 서버 폴더를 지정합니다. 기본값은 루트 `data/private/evaluation_execution_reports`이며 개인 PC 파일은 자동 복사되지 않습니다.
+
+상세 연결 구조와 저장소 설정은 [프론트 통합 안내](../../../docs/frontend-integration.md)를 참고하세요. 소스 준비와 운영 배포 완료는 별도로 확인합니다.

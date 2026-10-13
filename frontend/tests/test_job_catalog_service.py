@@ -132,6 +132,7 @@ def test_current_summary_change_addition_and_deletion_invalidate_only_needed_det
     assert result.json[0]["title"] == "수정된 공고"
     assert all(row["id"] != identifier(99) for row in result.json)
     assert sum(path.startswith("jobs/") for path, _ in upstream.calls) == 1
+    assert not any(path.startswith("companies/") for path, _ in upstream.calls)
 
 
 def test_expiry_reloads_details_and_cache_capacity_is_bounded(setup):
@@ -141,6 +142,7 @@ def test_expiry_reloads_details_and_cache_capacity_is_bounded(setup):
     service.max_entries = 7
     app.test_client().get(PATH, headers=HEADERS)
     assert len(service.cache) == 7
+    assert len(service.company_cache) <= 7
     upstream.calls.clear()
     app.test_client().get(PATH, headers=HEADERS)
     assert sum(path.startswith("jobs/") for path, _ in upstream.calls) == 100
@@ -242,8 +244,83 @@ def test_distinct_accounts_keep_cache_isolated_and_share_global_detail_capacity(
         assert upstream.peak <= 19
         assert {key[0] for key in service.cache} == {"owner-a", "owner-b", "owner-c"}
         assert all("Bearer" not in repr(key) for key in service.cache)
+        assert {key[0] for key in service.company_cache} == {"owner-a", "owner-b", "owner-c"}
+        assert sum(path.startswith("companies/") for path, _ in upstream.calls) == 60
     finally:
         service.pool.shutdown(wait=True, cancel_futures=True)
+
+
+def test_company_metadata_is_reused_across_pages_and_expires():
+    upstream = OriginalApi(count=200)
+    service = JobCatalogService("https://api.example.test", upstream, lambda _: "owner")
+    try:
+        first = service.page("limit=100", "Bearer member")
+        second = service.page("limit=100&offset=100", "Bearer member")
+        assert len(first) == len(second) == 100
+        assert second[0]["id"] == identifier(100)
+        assert sum(path.startswith("jobs/") for path, _ in upstream.calls) == 200
+        assert sum(path.startswith("companies/") for path, _ in upstream.calls) == 20
+        with service.lock:
+            service.cache.clear()
+            service.company_cache = type(service.company_cache)(
+                (key, (0, value[1])) for key, value in service.company_cache.items()
+            )
+        upstream.calls.clear()
+        service.page("limit=100", "Bearer member")
+        assert sum(path.startswith("companies/") for path, _ in upstream.calls) == 20
+    finally:
+        service.pool.shutdown(wait=True, cancel_futures=True)
+
+
+def test_overlapping_pages_share_details_without_occupying_workers_with_waiters():
+    upstream = OriginalApi(count=150, latency=0.01)
+    service = JobCatalogService("https://api.example.test", upstream, lambda _: "owner", workers=2)
+    barrier = Barrier(3)
+    try:
+        def read(offset):
+            barrier.wait()
+            return service.page(f"limit=100&offset={offset}", "Bearer member")
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            results = list(pool.map(read, [0, 25, 50]))
+        for offset, rows in zip([0, 25, 50], results):
+            assert [row["id"] for row in rows] == [identifier(index) for index in range(offset, offset + 100)]
+        assert sum(path.startswith("jobs/") for path, _ in upstream.calls) == 150
+        assert sum(path.startswith("companies/") for path, _ in upstream.calls) == 20
+        assert not service.pending and not service.detail_pending and not service.company_pending
+        # Copies returned to callers cannot mutate each other's data or cache.
+        results[0][25]["companies"]["name"] = "changed by caller"
+        assert results[1][0]["companies"]["name"].startswith("실제 회사")
+    finally:
+        service.pool.shutdown(wait=True, cancel_futures=True)
+
+
+def test_failed_page_does_not_cancel_shared_details_needed_by_another_page():
+    upstream = OriginalApi(count=48, latency=0.01)
+    upstream.fail = "jobs/" + identifier(0)
+    service = JobCatalogService("https://api.example.test", upstream, lambda _: "owner", workers=2)
+    barrier = Barrier(2)
+    try:
+        def read(offset):
+            barrier.wait()
+            return service.page(f"limit=32&offset={offset}", "Bearer member")
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            failed = pool.submit(read, 0)
+            succeeded = pool.submit(read, 16)
+            with pytest.raises(Exception) as error:
+                failed.result(timeout=5)
+            assert error.value.code == 503
+            rows = succeeded.result(timeout=5)
+        assert [row["id"] for row in rows] == [identifier(index) for index in range(16, 48)]
+        assert len(service.cache) == 32
+        assert not service.detail_pending
+    finally:
+        service.pool.shutdown(wait=True, cancel_futures=True)
+
+
+def test_deployment_copies_and_allows_the_frontend_compatibility_module():
+    folder = Path(__file__).parents[1] / "infra" / "deploy"
+    assert "CareerLens-frontend/job_catalog_service.py" in (folder / "Dockerfile").read_text()
+    assert "!CareerLens-frontend/job_catalog_service.py" in (folder / "Dockerfile.dockerignore").read_text()
 
 
 def test_monorepo_catalog_alias_is_registered_and_preserves_account_checks(setup):

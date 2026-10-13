@@ -31,6 +31,9 @@ class JobCatalogService:
         self.lock = Lock()
         self.cache = OrderedDict()
         self.pending = {}
+        self.detail_pending = {}
+        self.company_cache = OrderedDict()
+        self.company_pending = {}
 
     def _read(self, path, authorization):
         try:
@@ -45,16 +48,15 @@ class JobCatalogService:
         except (URLError, TimeoutError, OSError, ValueError, TypeError):
             raise ServiceUnavailable() from None
 
-    def _cached(self, key, fingerprint):
-        with self.lock:
-            cached = self.cache.get(key)
-            if not cached:
-                return None
-            if cached[0] <= monotonic() or cached[1] != fingerprint:
-                self.cache.pop(key, None)
-                return None
-            self.cache.move_to_end(key)
-            return deepcopy(cached[2])
+    def _cached_locked(self, key, fingerprint):
+        cached = self.cache.get(key)
+        if not cached:
+            return None
+        if cached[0] <= monotonic() or cached[1] != fingerprint:
+            self.cache.pop(key, None)
+            return None
+        self.cache.move_to_end(key)
+        return deepcopy(cached[2])
 
     @staticmethod
     def _identifier(value):
@@ -62,6 +64,58 @@ class JobCatalogService:
             return str(UUID(str(value)))
         except (TypeError, ValueError):
             raise ServiceUnavailable() from None
+
+    def _company_name(self, owner, identifier, authorization):
+        if not identifier:
+            return ""
+        identifier = self._identifier(identifier)
+        key = (owner, identifier)
+        with self.lock:
+            cached = self.company_cache.get(key)
+            if cached and cached[0] > monotonic():
+                self.company_cache.move_to_end(key)
+                return cached[1]
+            self.company_cache.pop(key, None)
+            future = self.company_pending.get(key)
+            leader = future is None
+            if leader:
+                future = self.company_pending[key] = Future()
+        if leader:
+            try:
+                try:
+                    company = self._read("companies/" + identifier, authorization)
+                    if not isinstance(company, dict):
+                        raise ServiceUnavailable()
+                    name = company.get("name") if isinstance(company.get("name"), str) else ""
+                except Exception as error:
+                    if getattr(error, "code", None) != 404:
+                        raise
+                    name = ""
+                with self.lock:
+                    self.company_cache[key] = (monotonic() + self.ttl, name)
+                    self.company_cache.move_to_end(key)
+                    while len(self.company_cache) > self.max_entries:
+                        self.company_cache.popitem(last=False)
+                future.set_result(name)
+            except Exception as error:
+                future.set_exception(error)
+            finally:
+                with self.lock:
+                    self.company_pending.pop(key, None)
+        return future.result()
+
+    def _hydrate(self, owner, record, authorization):
+        raw = record
+        if "description" not in raw:
+            # A deletion between list and detail is an incomplete page, not a
+            # shorter page that would silently truncate browser pagination.
+            raw = self._read("jobs/" + self._identifier(record["id"]), authorization)
+        if not isinstance(raw, dict) or raw.get("id") != record["id"]:
+            raise ServiceUnavailable()
+        raw = deepcopy(raw)
+        if "companies" not in raw:
+            raw["companies"] = {"name": self._company_name(owner, raw.get("company_id"), authorization)}
+        return raw
 
     def _page(self, owner, query, authorization):
         records = self._read("jobs?" + query, authorization)
@@ -77,71 +131,51 @@ class JobCatalogService:
         if all("description" in row and "companies" in row for row in records):
             return records
 
-        company_lock = Lock()
-        companies = {}
+        # Only leaders occupy worker threads. Other pages wait in their request
+        # threads, so overlapping pages cannot exhaust the pool with followers.
+        acquired = []
+        positions = {}
         updates = []
-
-        def company_name(identifier):
-            if not identifier:
-                return ""
-            identifier = self._identifier(identifier)
-            with company_lock:
-                future = companies.get(identifier)
-                leader = future is None
-                if leader:
-                    future = companies[identifier] = Future()
-            if leader:
-                try:
-                    company = self._read("companies/" + identifier, authorization)
-                    if not isinstance(company, dict):
-                        raise ServiceUnavailable()
-                    future.set_result(company.get("name") if isinstance(company.get("name"), str) else "")
-                except Exception as error:
-                    if getattr(error, "code", None) == 404:
-                        future.set_result("")
-                    else:
-                        future.set_exception(error)
-            return future.result()
-
-        def hydrate(position, record):
-            identifier = self._identifier(record["id"])
-            key = (owner, identifier)
-            fingerprint = json.dumps(record, sort_keys=True, ensure_ascii=False)
-            cached = self._cached(key, fingerprint)
-            if cached is not None:
-                return position, cached, None
-            raw = record
-            if "description" not in raw:
-                # A deletion between list and detail is a retryable incomplete
-                # page, not a shorter page that would truncate pagination.
-                raw = self._read("jobs/" + identifier, authorization)
-            if not isinstance(raw, dict) or raw.get("id") != record["id"]:
-                raise ServiceUnavailable()
-            raw = deepcopy(raw)
-            if "companies" not in raw:
-                raw["companies"] = {"name": company_name(raw.get("company_id"))}
-            return position, raw, (key, fingerprint, raw)
-
-        futures = [self.pool.submit(hydrate, index, record) for index, record in enumerate(records)]
         mapped = [None] * len(records)
         try:
-            for future in as_completed(futures):
-                index, value, update = future.result()
-                mapped[index] = value
-                if update is not None:
-                    updates.append(update)
-        except Exception:
-            for future in futures:
-                future.cancel()
-            # A partial/failed page must never become a completed cache entry.
-            raise
-        with self.lock:
-            for key, fingerprint, value in updates:
-                self.cache[key] = (monotonic() + self.ttl, fingerprint, deepcopy(value))
-                self.cache.move_to_end(key)
-            while len(self.cache) > self.max_entries:
-                self.cache.popitem(last=False)
-        return [value for value in mapped if value is not None]
+            for index, record in enumerate(records):
+                key = (owner, self._identifier(record["id"]))
+                fingerprint = json.dumps(record, sort_keys=True, ensure_ascii=False)
+                flight_key = (*key, fingerprint)
+                with self.lock:
+                    cached = self._cached_locked(key, fingerprint)
+                    if cached is not None:
+                        mapped[index] = cached
+                        continue
+                    flight = self.detail_pending.get(flight_key)
+                    if flight is None:
+                        flight = {"future": self.pool.submit(self._hydrate, owner, record, authorization), "users": 0}
+                        self.detail_pending[flight_key] = flight
+                    flight["users"] += 1
+                    acquired.append(flight_key)
+                    positions.setdefault(flight["future"], []).append((index, key, fingerprint))
+            for future in as_completed(positions):
+                value = future.result()
+                for index, key, fingerprint in positions[future]:
+                    mapped[index] = deepcopy(value)
+                    updates.append((key, fingerprint, value))
+            # Commit only a complete page. A failing overlapping request must
+            # neither publish partial results nor cancel another page's work.
+            with self.lock:
+                for key, fingerprint, value in updates:
+                    self.cache[key] = (monotonic() + self.ttl, fingerprint, deepcopy(value))
+                    self.cache.move_to_end(key)
+                while len(self.cache) > self.max_entries:
+                    self.cache.popitem(last=False)
+            return mapped
+        finally:
+            with self.lock:
+                for flight_key in acquired:
+                    flight = self.detail_pending[flight_key]
+                    flight["users"] -= 1
+                    if not flight["users"]:
+                        self.detail_pending.pop(flight_key)
+                        flight["future"].cancel()
 
     def page(self, query, authorization):
         # Always verify the live bearer through the existing backend, even when
