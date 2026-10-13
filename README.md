@@ -32,6 +32,8 @@ $env:FRONTEND_PUBLIC_ORIGIN = "http://127.0.0.1:5400"
 
 ## 배포와 확인
 
+GPT에게 배포를 맡길 때는 [GPT 실행용 Render 배포 설명서](docs/gpt-render-deployment.md)의 요청문과 실행 순서를 전달하세요. 기존 서비스·DB 보존, 정확한 커밋 배포, 배포 후 검증과 필요한 접근 조건을 포함합니다.
+
 Render 통합 배포는 팀 환경의 [blueprints/team3.yaml](blueprints/team3.yaml), 독립 환경의 [render.yaml](render.yaml)을 사용합니다. 기존 `uvicorn app.main:app` 시작 명령이 화면과 API를 함께 제공합니다. 팀 서비스·프로젝트·DB 이름을 유지하며 이 구성에서는 별도 프론트 서비스를 만들 필요가 없습니다. `frontend/render.yaml`은 이전 독립 프론트 구성의 안내 파일입니다.
 
 `/healthz`는 프로세스 생존, `/health`는 DB 연결, `/api/v1/local-guest/capabilities`는 비회원 엔진의 의존성·설정 가용성을 확인합니다. 가용성 응답은 실제 모델 요청이나 분석 성공을 보증하지 않습니다.
