@@ -38,27 +38,17 @@ def row(**extra):
     return {"id": RUN, "status": "completed", "created_at": datetime.now(timezone.utc).isoformat(), **extra}
 
 @pytest.mark.parametrize("path", ["", "/" + RUN])
-def test_guest_denied_before_any_upstream_request(path):
+@pytest.mark.parametrize("base", ["/api/v1/admin/evaluation-performance", "/api/v1/local-data/member-performance"])
+def test_guest_denied_before_any_upstream_request(path, base):
     opener = Opener([])
-    response = client(opener).get("/api/v1/admin/evaluation-performance" + path)
+    response = client(opener).get(base + path)
     assert response.status_code == 401
     assert not opener.calls
 
-
-def test_member_route_avoids_integrated_backend_admin_path():
-    opener = Opener([row()])
-    response = client(opener).get(
-        "/api/v1/member/evaluation-performance?run_limit=100",
-        headers={"Authorization": "Bearer fixture-token"},
-    )
-    assert response.status_code == 200
-    assert response.json["scope"]["mode"] == "account"
-    assert opener.calls[0].full_url == "https://api.example.test/api/v1/evaluations?limit=100&offset=0"
-
-
-def test_member_uses_existing_owned_list_not_administrator_route():
+@pytest.mark.parametrize("base", ["/api/v1/admin/evaluation-performance", "/api/v1/local-data/member-performance"])
+def test_member_uses_existing_owned_list_not_administrator_route(base):
     opener = Opener([row(user_id="private-owner", original_text="private-resume", token="private-token")])
-    response = client(opener).get("/api/v1/admin/evaluation-performance?run_limit=100", headers={"Authorization": "Bearer synthetic-member"})
+    response = client(opener).get(base + "?run_limit=100", headers={"Authorization": "Bearer synthetic-member"})
     assert response.status_code == 200
     assert response.json["scope"]["mode"] == "account"
     assert response.json["summary"]["run_count"] == 1

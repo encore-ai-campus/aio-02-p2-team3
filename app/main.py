@@ -4,8 +4,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.wsgi import WSGIMiddleware
-from frontend.server import create_app as create_frontend_app
 from app.core.config import settings
 from app.infrastructure.database.postgres import DB, DatabaseError
 from app.integrations.llm.client import LLM
@@ -36,8 +34,11 @@ async def lifespan(app):
         except asyncio.CancelledError:
             pass
         finally:
-            await app.state.db.close()
-            await app.state.llm.close()
+            try:
+                await app.state.db.close()
+                await app.state.llm.close()
+            finally:
+                app.state.frontend.extensions['guest_analysis'].shutdown(wait=False)
 
 
 app = FastAPI(title='CareerLens Backend', version='0.1.0', lifespan=lifespan)
@@ -80,6 +81,8 @@ async def healthz():
     return {'status': 'ok'}
 
 
-# Keep API, docs, and health routes ahead of the frontend fallback.
-# Both applications share the same process and Render URL; no HTTP proxy loop.
-app.mount('/', WSGIMiddleware(create_frontend_app(backend_url='', integrated=True)), name='frontend')
+# Register last: existing backend API/authentication and health routes keep
+# their native handlers; frontend-owned APIs and pages use the same origin.
+from app.frontend import mount_frontend
+
+mount_frontend(app)

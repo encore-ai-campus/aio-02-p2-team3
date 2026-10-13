@@ -99,6 +99,14 @@ async function requestApi(
   const observation = sessionProbe || /^\/flow(?:\/|$)/.test(path) ? null : beginFlowEvent(classifyFlowRequest(path), { kind: 'request', method });
   let response;
   let probeRecorded = false;
+  // Keep frontend compatibility APIs separate from the native backend routes.
+  // In the fullstack app those backend routes retain their original permissions.
+  let transportPath = path;
+  if (method === 'GET' && /^\/admin\/evaluation-performance(?:[/?]|$)/.test(path))
+    transportPath = path.replace('/admin/evaluation-performance', '/local-data/member-performance');
+  else if (method === 'GET' && path.startsWith('/jobs?') &&
+      new URLSearchParams(path.slice(path.indexOf('?') + 1)).get('include_details') === 'true')
+    transportPath = path.replace('/jobs?', '/local-data/jobs?');
   function finishObservation({ state = 'complete' } = {}) {
     if (!sessionProbe) return finishFlowEvent(observation, { state });
     if (probeRecorded) return;
@@ -108,11 +116,11 @@ async function requestApi(
     });
   }
   try {
-    response = await fetch(`/api/v1${path}`, {
+    response = await fetch(`/api/v1${transportPath}`, {
       method,
       headers,
       credentials: 'same-origin',
-      ...(/^\/(?:admin|member)\/evaluation-performance(?:[/?]|$)/.test(path) ? { cache: 'no-store' } : {}),
+      ...(/^\/(?:admin|member)\/evaluation-performance(?:[/?]|$)/.test(path) || /^\/local-data\/execution-reports(?:[/?]|$)/.test(path) ? { cache: 'no-store' } : {}),
       signal,
       keepalive,
       body: body === undefined ? undefined : multipart ? body : JSON.stringify(body),

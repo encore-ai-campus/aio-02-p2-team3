@@ -12,6 +12,8 @@
 !CareerLens-frontend/guest_analysis_service.py
 !CareerLens-frontend/guest_analysis_engine.py
 !CareerLens-frontend/job_catalog_service.py
+!CareerLens-frontend/backend_location.py
+!CareerLens-frontend/execution_report_service.py
 !CareerLens-frontend/src
 !CareerLens-frontend/src/**
 !CareerLens-frontend/public

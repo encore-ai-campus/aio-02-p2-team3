@@ -1,7 +1,7 @@
 """Run the team's real evaluation graph without an account or production DB writes.
 
 The frontend server owns guest access, input validation, expiry and persistence.
-This module only computes a result using the sibling backend's unchanged engine.
+This module computes results using the monorepo or sibling backend's engine.
 Imports and configuration are lazy so frontend-only deployments remain usable.
 """
 
@@ -19,8 +19,13 @@ from threading import RLock
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
+if __package__:
+    from .backend_location import resolve_backend_root
+else:
+    from backend_location import resolve_backend_root
 
-_BACKEND_ROOT = Path(__file__).resolve().parent.parent / "CareerLens-backend"
+
+_BACKEND_ROOT = resolve_backend_root(Path(__file__).resolve().parent)
 _IMPORT_LOCK = RLock()
 
 

@@ -135,8 +135,8 @@ test('dashboard summary and detail bypass browser cache with authenticated membe
   const calls = [];
   globalThis.fetch = async (url, options) => { calls.push({ url, options }); return Response.json({}); };
   try {
-    await api('/admin/evaluation-performance?days=30&run_limit=100');
-    await api('/admin/evaluation-performance/11111111-1111-4111-8111-111111111111');
+    await api('/member/evaluation-performance?days=30&run_limit=100');
+    await api('/member/evaluation-performance/11111111-1111-4111-8111-111111111111');
     assert.equal(calls.length, 2);
     for (const { options } of calls) {
       assert.equal(options.cache, 'no-store');

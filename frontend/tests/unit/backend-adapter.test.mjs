@@ -127,13 +127,13 @@ test('saved report pages filter completed evaluations while paging over the orig
   assert.deepEqual(calls, ['/evaluations?limit=20&offset=200', '/evaluations?limit=20&offset=220']);
 });
 
-test('saved report list uses database evaluations without querying local guest reports', async () => {
+test('saved report list uses database evaluations when guest storage is not provided', async () => {
   sessionStorage.setItem('careerlens.backend.access-token', 'fixture-token');
   const calls = [];
   const request = async (path) => {
     calls.push(path);
     if (path === '/local-guest/capabilities')
-      return { available: true, storage_origin: 'frontend_guest' };
+      return { available: false };
     if (path === '/me') return { user_id: 'member-1' };
     if (path === '/evaluations?limit=20&offset=0')
       return [{ id: 'db-run', status: 'completed', created_at: '2026-10-10T10:00:00Z' }];
@@ -2312,6 +2312,45 @@ test('callback validates only its profile without probing dashboard access', asy
   );
   assert.equal(session.user.is_admin, false);
   assert.deepEqual(calls, ['/me']);
+});
+
+for (const path of [
+  '/member/evaluation-performance?days=7&run_limit=100',
+  '/member/evaluation-performance/12345678-1234-5678-1234-123456789abc',
+  '/local-data/execution-reports?limit=20&offset=40',
+  '/local-data/execution-reports/12345678-1234-5678-1234-123456789abc',
+]) {
+  test(`${path} preserves authenticated GET parameters and response`, async () => {
+    const response = { summary: {}, reports: [], run: { id: 'synthetic' } };
+    const controller = new AbortController();
+    await assert.rejects(
+      backendApi(path, { signal: controller.signal }, async () => assert.fail('Login required'), ApiError),
+      (failure) => failure.status === 401 && failure.code === 'login_required',
+    );
+    sessionStorage.setItem('careerlens.backend.access-token', 'fixture-token');
+    assert.equal(await backendApi(path, { signal: controller.signal }, async (requested, options) => {
+      assert.equal(requested, path);
+      assert.deepEqual(options, { signal: controller.signal });
+      return response;
+    }, ApiError), response);
+  });
+}
+
+test('read-only report pass-through does not allow mutations, non-UUID details or unrelated local routes', async () => {
+  sessionStorage.setItem('careerlens.backend.access-token', 'fixture-token');
+  for (const [path, method] of [
+    ['/local-data/execution-reports', 'POST'],
+    ['/member/evaluation-performance', 'DELETE'],
+    ['/local-data/execution-reports/not-a-uuid', 'GET'],
+    ['/member/evaluation-performance/------------------------------------', 'GET'],
+    ['/local-data/execution-reports/12345678-1234-5678-1234-123456789abc/private', 'GET'],
+    ['/local-data/private', 'GET'],
+  ]) {
+    await assert.rejects(
+      backendApi(path, { method }, async () => assert.fail('Unlisted route must not call API'), ApiError),
+      (failure) => failure.status === 501,
+    );
+  }
 });
 
 for (const mode of ['anonymous', 'member', 'demo']) {

@@ -1,6 +1,7 @@
 import { escapeHtml as e, icon } from '../shared/components/ui.js';
 import { api as requestApi } from '../shared/api/client.js';
 import { getFlowViewerUrl } from '../features/activity-flow/events.js';
+import { executionReportsPanel, mountExecutionReports } from '../features/admin/execution-reports.js';
 import {
   RUN_STATUSES,
   RUN_LIMIT,
@@ -26,6 +27,7 @@ export function adminDashboard(user) {
     <div class="page-heading"><div><p class="admin-dashboard__eyebrow">CAREERLENS / OPERATIONS</p><h1>대시보드</h1><p>가입한 모든 회원이 실행 기록과 실시간 이용 흐름을 확인할 수 있습니다.</p></div><a class="button secondary" href="#/mypage">마이페이지로 돌아가기</a></div>
     <div class="admin-dashboard__body">
       ${renderFlowEntry(getFlowViewerUrl())}
+      ${executionReportsPanel()}
       <div class="admin-dashboard__toolbar" aria-label="실행 조회 조건">
         <label for="admin-days">조회 기간<select id="admin-days" data-admin-days><option value="7">최근 7일</option><option value="30" selected>최근 30일</option><option value="90">최근 90일</option></select></label>
         <label for="admin-status">실행 상태<select id="admin-status" data-admin-status><option value="all">전체 상태</option>${RUN_STATUSES.map(([value, label]) => `<option value="${value}">${e(label)}</option>`).join('')}<option value="other">기타 상태</option></select></label>
@@ -58,6 +60,7 @@ export function mountAdminDashboard(root, {
   const announcement = host.querySelector('[data-admin-announcement]');
   const refresh = host.querySelector('[data-admin-refresh]');
   if (!content || !announcement || !refresh) return () => {};
+  const cleanupReports = mountExecutionReports(host, api);
   let days = 30,
     status = 'all',
     selectedIndex = -1,
@@ -268,6 +271,7 @@ export function mountAdminDashboard(root, {
   function cleanup() {
     if (disposed) return;
     disposed = true;
+    cleanupReports();
     generation++;
     request?.abort();
     cancelDetail();

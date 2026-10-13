@@ -10,7 +10,7 @@ COPY CareerLens-backend/workers ./CareerLens-backend/workers
 COPY CareerLens-frontend/src ./CareerLens-frontend/src
 COPY CareerLens-frontend/public ./CareerLens-frontend/public
 COPY CareerLens-frontend/data/career-postings.json ./CareerLens-frontend/data/career-postings.json
-COPY CareerLens-frontend/server.py CareerLens-frontend/resume_conversion.py CareerLens-frontend/guest_analysis_service.py CareerLens-frontend/guest_analysis_engine.py CareerLens-frontend/job_catalog_service.py ./CareerLens-frontend/
+COPY CareerLens-frontend/server.py CareerLens-frontend/resume_conversion.py CareerLens-frontend/guest_analysis_service.py CareerLens-frontend/guest_analysis_engine.py CareerLens-frontend/job_catalog_service.py CareerLens-frontend/backend_location.py CareerLens-frontend/execution_report_service.py ./CareerLens-frontend/
 RUN useradd --uid 10001 --create-home careerlens && mkdir -p /var/lib/careerlens/guest /var/lib/careerlens/reports /var/lib/careerlens/execution-reports && chown -R careerlens:careerlens /var/lib/careerlens
 USER careerlens
 WORKDIR /opt/careerlens/CareerLens-frontend

@@ -262,3 +262,15 @@ test('central flow requests preserve optional member bearer tokens', async () =>
     assert.equal(calls[0].options.method, 'POST');
   });
 });
+
+test('member dashboard uses frontend compatibility route without weakening native admin API', async () => {
+  sessionStorage.setItem('careerlens.backend.access-token', 'ordinary-member');
+  await withFetch(async (url, options) => {
+    assert.equal(url, '/api/v1/local-data/member-performance?days=7&run_limit=100');
+    assert.equal(options.headers.Authorization, 'Bearer ordinary-member');
+    return Response.json({ runs: [], scope: { mode: 'account' } });
+  }, async () => {
+    const result = await api('/admin/evaluation-performance?days=7&run_limit=100');
+    assert.equal(result.scope.mode, 'account');
+  });
+});

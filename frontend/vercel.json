@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "server.py": {
+    "wsgi.py": {
       "maxDuration": 60,
       "includeFiles": "{public/**,src/**,data/career-postings.json}"
     }
